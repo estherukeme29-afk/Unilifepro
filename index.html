@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#6EE7B7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="UniLife" />
+  <title>UniLife – Student Life Planner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#0D0D0D;overflow:hidden}
+    #root{height:100%}
+    ::-webkit-scrollbar{width:4px}
+    ::-webkit-scrollbar-thumb{background:rgba(245,240,232,0.15);border-radius:4px}
+    button{font-family:'Plus Jakarta Sans',sans-serif;outline:none;border:none}
+    input,select,textarea{
+      background:rgba(245,240,232,0.07);
+      border:1.5px solid rgba(245,240,232,0.12);
+      border-radius:10px;color:#F5F0E8;padding:10px 14px;
+      font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;
+      width:100%;outline:none;transition:border .2s;
+    }
+    input:focus,select:focus,textarea:focus{border-color:rgba(245,240,232,0.4)}
+    select option{background:#1a1a1a;color:#F5F0E8}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes slideInLeft{from{opacity:0;transform:translateX(-100%)}to{opacity:1;transform:translateX(0)}}
+    @keyframes confettiPop{0%{opacity:1;transform:translateX(-50%) scale(.5) translateY(0)}100%{opacity:0;transform:translateX(-50%) scale(1.8) translateY(-50px)}}
+    @keyframes calFade{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+    .slide-up{animation:slideUp .3s ease}
+    .cal-anim{animation:calFade .25s ease}
+    .confetti-burst{animation:confettiPop 1s ease forwards;pointer-events:none;position:absolute;font-size:24px;top:-10px;left:50%;z-index:20}
+    .task-row{transition:background .15s,opacity .2s}
+    .task-row:hover{background:rgba(245,240,232,0.06)!important}
+    .tick-btn{transition:transform .15s,background .15s,border-color .15s;cursor:pointer}
+    .tick-btn:hover{transform:scale(1.18)}
+    .cal-cell{transition:background .12s;cursor:pointer}
+    .cal-cell:hover{background:rgba(245,240,232,0.1)!important}
+    .nav-pill{transition:background .15s,color .15s;cursor:pointer}
+    .nav-pill:hover{background:rgba(245,240,232,0.12)!important}
+    .sidebar-btn{transition:background .15s,color .15s;cursor:pointer}
+    .sidebar-btn:hover{background:rgba(245,240,232,0.06)!important}
+    .progress-bar{transition:width .7s cubic-bezier(.34,1.2,.64,1)}
+    .modal-overlay{animation:fadeIn .2s ease}
+    .modal-sheet{animation:slideUp .28s cubic-bezier(.34,1.2,.64,1)}
+    .drawer{animation:slideInLeft .25s ease}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ── Data ────────────────────────────────────────────────────────────────────
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAYS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+const CATS = {
+  academic: { label:"Academic",  icon:"🎓", color:"#6EE7B7" },
+  social:   { label:"Social",    icon:"🎉", color:"#FCA5A5" },
+  health:   { label:"Health",    icon:"💪", color:"#93C5FD" },
+  errands:  { label:"Errands",   icon:"🛒", color:"#FDE68A" },
+  self:     { label:"Self-care", icon:"🧘", color:"#C4B5FD" },
+  finance:  { label:"Finance",   icon:"💰", color:"#86EFAC" },
+  work:     { label:"Work",      icon:"💼", color:"#FDA4AF" },
+  creative: { label:"Creative",  icon:"🎨", color:"#FED7AA" },
+};
+
+const PRIORITIES = {
+  high:   { label:"High",   color:"#FCA5A5" },
+  medium: { label:"Medium", color:"#FDE68A" },
+  low:    { label:"Low",    color:"#6EE7B7"  },
+};
+
+const QUOTES = [
+  "You didn't come this far to only come this far. 🔥",
+  "Rest is productive. You're doing great. ☀️",
+  "One task at a time. That's all it takes. 🧩",
+  "Your future self is cheering you on right now. 🎉",
+  "Progress, not perfection. Keep going! 💫",
+];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function todayStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function fmtDate(d){
+  const x=new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+}
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return fmtDate(d); }
+function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+function firstWeekday(y,m){ return new Date(y,m,1).getDay(); }
+function relDay(ds){
+  const diff=Math.round((new Date(ds+"T12:00:00")-new Date(todayStr()+"T12:00:00"))/86400000);
+  if(diff===0)return"Today"; if(diff===1)return"Tomorrow"; if(diff===-1)return"Yesterday";
+  return diff<0?`${-diff}d ago`:`in ${diff}d`;
+}
+
+// ── Seed tasks ───────────────────────────────────────────────────────────────
+const SEEDS = [
+  {id:1, title:"Submit research paper draft",  cat:"academic", priority:"high",   date:todayStr(),  done:false, note:"Chapter 3 needs citations"},
+  {id:2, title:"Study for Economics midterm",  cat:"academic", priority:"high",   date:addDays(4),  done:false, note:""},
+  {id:3, title:"Gym session",                  cat:"health",   priority:"medium", date:todayStr(),  done:true,  note:"Leg day 💪"},
+  {id:4, title:"Grocery run",                  cat:"errands",  priority:"low",    date:addDays(1),  done:false, note:"Milk, eggs, rice, fruit"},
+  {id:5, title:"Call mum & dad",               cat:"social",   priority:"medium", date:todayStr(),  done:false, note:""},
+  {id:6, title:"Pay rent",                     cat:"finance",  priority:"high",   date:addDays(3),  done:false, note:"Bank transfer"},
+  {id:7, title:"Movie night with flatmates",   cat:"social",   priority:"low",    date:addDays(6),  done:false, note:"Dune 2?"},
+  {id:8, title:"Yoga & meditation",            cat:"self",     priority:"medium", date:addDays(1),  done:false, note:""},
+  {id:9, title:"Part-time shift at café",      cat:"work",     priority:"high",   date:addDays(5),  done:false, note:"9am–2pm"},
+  {id:10,title:"Laundry",                      cat:"errands",  priority:"low",    date:todayStr(),  done:false, note:""},
+  {id:11,title:"Read Atomic Habits ch.5",      cat:"self",     priority:"low",    date:addDays(7),  done:false, note:""},
+  {id:12,title:"Group project Zoom",           cat:"academic", priority:"high",   date:addDays(3),  done:false, note:"4pm zoom call"},
+  {id:13,title:"Sketch portfolio piece",       cat:"creative", priority:"medium", date:addDays(8),  done:false, note:""},
+  {id:14,title:"Doctor appointment",           cat:"health",   priority:"high",   date:addDays(10), done:false, note:"10:30am clinic"},
+  {id:15,title:"Reply to internship email",    cat:"work",     priority:"high",   date:todayStr(),  done:false, note:""},
+];
+
+// ── App ──────────────────────────────────────────────────────────────────────
+function App(){
+  const TODAY = todayStr();
+  const now   = new Date();
+
+  const [tasks,    setTasks]    = useState(() => {
+    try{ const s=localStorage.getItem("ul_tasks"); return s?JSON.parse(s):SEEDS; }catch{ return SEEDS; }
+  });
+  const [view,     setView]     = useState("today");
+  const [selDate,  setSelDate]  = useState(TODAY);
+  const [calYear,  setCalYear]  = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const [fCat,     setFCat]     = useState("all");
+  const [fPri,     setFPri]     = useState("all");
+  const [showDone, setShowDone] = useState(true);
+  const [search,   setSearch]   = useState("");
+  const [drawer,   setDrawer]   = useState(false);
+  const [modal,    setModal]    = useState(false);
+  const [editId,   setEditId]   = useState(null);
+  const [confetti, setConfetti] = useState(null);
+  const [animKey,  setAnimKey]  = useState(0);
+  const [form,     setForm]     = useState({title:"",cat:"academic",priority:"medium",date:TODAY,note:""});
+  const [quote]                 = useState(QUOTES[Math.floor(Math.random()*QUOTES.length)]);
+
+  // Persist to localStorage
+  useEffect(()=>{ try{localStorage.setItem("ul_tasks",JSON.stringify(tasks));}catch{} },[tasks]);
+
+  const todayTasks = tasks.filter(t=>t.date===TODAY);
+  const doneCnt    = todayTasks.filter(t=>t.done).length;
+  const progress   = todayTasks.length ? Math.round(doneCnt/todayTasks.length*100) : 0;
+
+  const tick = id => {
+    const t = tasks.find(x=>x.id===id);
+    setTasks(ts=>ts.map(x=>x.id===id?{...x,done:!x.done}:x));
+    if(t && !t.done){ setConfetti(id); setTimeout(()=>setConfetti(null),1100); }
+  };
+
+  const openAdd  = date => { setForm({title:"",cat:"academic",priority:"medium",date:date||selDate,note:""}); setEditId(null); setModal(true); };
+  const openEdit = t    => { setForm({title:t.title,cat:t.cat,priority:t.priority,date:t.date,note:t.note||""}); setEditId(t.id); setModal(true); };
+  const saveTask = ()   => {
+    if(!form.title.trim()) return;
+    editId ? setTasks(ts=>ts.map(t=>t.id===editId?{...t,...form}:t))
+           : setTasks(ts=>[...ts,{...form,id:Date.now(),done:false}]);
+    setModal(false);
+  };
+  const delTask = id => { setTasks(ts=>ts.filter(t=>t.id!==id)); setModal(false); };
+
+  const filtered = list => list
+    .filter(t=>fCat==="all"||t.cat===fCat)
+    .filter(t=>fPri==="all"||t.priority===fPri)
+    .filter(t=>showDone||!t.done)
+    .filter(t=>!search||t.title.toLowerCase().includes(search.toLowerCase()));
+
+  const viewTasks = () => {
+    if(view==="today")    return filtered(tasks.filter(t=>t.date===TODAY)).sort((a,b)=>a.done-b.done);
+    if(view==="calendar") return filtered(tasks.filter(t=>t.date===selDate)).sort((a,b)=>a.done-b.done);
+    return filtered([...tasks]).sort((a,b)=>a.date.localeCompare(b.date)||(a.done-b.done));
+  };
+
+  const prevCal = () => { setAnimKey(k=>k+1); calMonth===0?(setCalMonth(11),setCalYear(y=>y-1)):setCalMonth(m=>m-1); };
+  const nextCal = () => { setAnimKey(k=>k+1); calMonth===11?(setCalMonth(0),setCalYear(y=>y+1)):setCalMonth(m=>m+1); };
+
+  // ── Sidebar ────────────────────────────────────────────────────────────────
+  const Sidebar = () => (
+    <div style={{display:"flex",flexDirection:"column",gap:16,padding:"16px 12px",overflowY:"auto",height:"100%"}}>
+      {/* Quote */}
+      <div style={{background:"linear-gradient(135deg,rgba(110,231,183,.13),rgba(147,197,253,.13))",border:"1px solid rgba(110,231,183,.22)",borderRadius:14,padding:14}}>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:1,opacity:.5,marginBottom:5}}>DAILY VIBE ✨</div>
+        <div style={{fontSize:12,lineHeight:1.6,fontWeight:600}}>{quote}</div>
+      </div>
+      {/* Progress */}
+      <div style={{background:"rgba(245,240,232,.04)",borderRadius:14,padding:14}}>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:1,opacity:.5,marginBottom:8}}>TODAY'S PROGRESS</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:26,fontWeight:900}}>{progress}%</span>
+          <span style={{fontSize:11,opacity:.4}}>{doneCnt}/{todayTasks.length} done</span>
+        </div>
+        <div style={{height:6,background:"rgba(245,240,232,.1)",borderRadius:10,overflow:"hidden"}}>
+          <div className="progress-bar" style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#6EE7B7,#93C5FD)",borderRadius:10,boxShadow:"0 0 10px rgba(110,231,183,.4)"}} />
+        </div>
+      </div>
+      {/* Category filter */}
+      <div>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:1,opacity:.45,marginBottom:7}}>CATEGORY</div>
+        {[["all","🗂️","All"],["academic","🎓","Academic"],["social","🎉","Social"],["health","💪","Health"],["errands","🛒","Errands"],["self","🧘","Self-care"],["finance","💰","Finance"],["work","💼","Work"],["creative","🎨","Creative"]].map(([k,ic,lb])=>(
+          <button key={k} className="sidebar-btn" onClick={()=>setFCat(k)} style={{
+            display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:9,marginBottom:2,
+            background:fCat===k?"rgba(110,231,183,.15)":"transparent",
+            color:fCat===k?"#6EE7B7":"rgba(245,240,232,.55)",
+            fontSize:12,fontWeight:fCat===k?800:600,
+            border:fCat===k?"1px solid rgba(110,231,183,.25)":"1px solid transparent",
+          }}>
+            <span>{ic}</span>{lb}
+            <span style={{marginLeft:"auto",fontSize:10,opacity:.45}}>{k==="all"?tasks.length:tasks.filter(t=>t.cat===k).length}</span>
+          </button>
+        ))}
+      </div>
+      {/* Priority filter */}
+      <div>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:1,opacity:.45,marginBottom:7}}>PRIORITY</div>
+        {[["all","All"],["high","🔴 High"],["medium","🟡 Medium"],["low","🟢 Low"]].map(([k,lb])=>(
+          <button key={k} className="sidebar-btn" onClick={()=>setFPri(k)} style={{
+            display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:9,marginBottom:2,
+            background:fPri===k?"rgba(245,240,232,.08)":"transparent",
+            color:fPri===k?"#F5F0E8":"rgba(245,240,232,.45)",
+            fontSize:12,fontWeight:fPri===k?800:600,border:"1px solid transparent",
+          }}>{lb}</button>
+        ))}
+      </div>
+      <button className="sidebar-btn" onClick={()=>setShowDone(s=>!s)} style={{
+        padding:"8px 12px",borderRadius:10,fontSize:12,fontWeight:700,
+        background:"rgba(245,240,232,.05)",color:"rgba(245,240,232,.55)",
+        border:"1px solid rgba(245,240,232,.1)",textAlign:"left",
+      }}>{showDone?"👁 Hide completed":"👁 Show completed"}</button>
+    </div>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#0D0D0D",color:"#F5F0E8"}}>
+
+      {/* TOP BAR */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:"rgba(245,240,232,.03)",borderBottom:"1px solid rgba(245,240,232,.07)",flexWrap:"wrap",flexShrink:0}}>
+        <button onClick={()=>setDrawer(o=>!o)} style={{width:36,height:36,borderRadius:9,background:"rgba(245,240,232,.07)",color:"#F5F0E8",fontSize:17,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>☰</button>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#6EE7B7,#93C5FD)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 0 14px rgba(110,231,183,.35)"}}>🎓</div>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,letterSpacing:-.3}}>UniLife</div>
+            <div style={{fontSize:9,opacity:.35}}>Student · Life · Balance</div>
+          </div>
+        </div>
+        <input placeholder="🔍 Search tasks…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:100,maxWidth:220,height:34,padding:"0 12px",fontSize:12}} />
+        <button onClick={()=>openAdd(view==="calendar"?selDate:TODAY)} style={{
+          padding:"7px 16px",borderRadius:10,fontSize:13,fontWeight:800,
+          background:"linear-gradient(135deg,#6EE7B7,#93C5FD)",color:"#0D1A14",
+          boxShadow:"0 0 14px rgba(110,231,183,.3)",cursor:"pointer",flexShrink:0,
+        }}>+ Add</button>
+      </div>
+
+      {/* BODY */}
+      <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
+
+        {/* Drawer overlay */}
+        {drawer && <>
+          <div onClick={()=>setDrawer(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:100,animation:"fadeIn .2s ease"}} />
+          <div className="drawer" style={{position:"fixed",top:0,left:0,bottom:0,width:230,background:"#141414",borderRight:"1px solid rgba(245,240,232,.08)",zIndex:101,display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 14px 4px"}}>
+              <span style={{fontSize:11,fontWeight:800,opacity:.4}}>MENU</span>
+              <button onClick={()=>setDrawer(false)} style={{background:"none",border:"none",color:"#F5F0E8",fontSize:18,cursor:"pointer",opacity:.4}}>✕</button>
+            </div>
+            <Sidebar />
+          </div>
+        </>}
+
+        {/* Main scroll area */}
+        <div style={{flex:1,overflowY:"auto",padding:"18px 14px 90px"}}>
+
+          {/* TODAY VIEW */}
+          {view==="today" && <div className="slide-up">
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:24,fontWeight:800,letterSpacing:-.5}}>{new Date(TODAY+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})}</div>
+              <div style={{fontSize:12,opacity:.4,marginTop:2}}>{new Date(TODAY+"T12:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10}}>
+                <div style={{flex:1,height:5,background:"rgba(245,240,232,.08)",borderRadius:10,overflow:"hidden"}}>
+                  <div className="progress-bar" style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#6EE7B7,#93C5FD)",borderRadius:10}} />
+                </div>
+                <span style={{fontSize:10,opacity:.4,whiteSpace:"nowrap"}}>{doneCnt}/{todayTasks.length} done</span>
+              </div>
+            </div>
+            <TaskList tasks={viewTasks()} onTick={tick} onEdit={openEdit} onDel={delTask} confetti={confetti} openAdd={()=>openAdd(TODAY)} />
+          </div>}
+
+          {/* CALENDAR VIEW */}
+          {view==="calendar" && <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <button onClick={prevCal} style={{width:32,height:32,borderRadius:8,background:"rgba(245,240,232,.08)",color:"#F5F0E8",fontSize:16,cursor:"pointer"}}>‹</button>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:800}}>{MONTHS[calMonth]}</div>
+                <div style={{fontSize:11,opacity:.35}}>{calYear}</div>
+              </div>
+              <button onClick={nextCal} style={{width:32,height:32,borderRadius:8,background:"rgba(245,240,232,.08)",color:"#F5F0E8",fontSize:16,cursor:"pointer"}}>›</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
+              {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:9,fontWeight:800,opacity:.3,padding:"3px 0"}}>{d}</div>)}
+            </div>
+            <div key={animKey} className="cal-anim" style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:18}}>
+              {Array.from({length:firstWeekday(calYear,calMonth)}).map((_,i)=><div key={"e"+i}/>)}
+              {Array.from({length:daysInMonth(calYear,calMonth)}).map((_,i)=>{
+                const d=i+1;
+                const ds=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                const dts=tasks.filter(t=>t.date===ds);
+                const isT=ds===TODAY, isSel=ds===selDate;
+                return (
+                  <div key={d} className="cal-cell" onClick={()=>setSelDate(ds)} style={{
+                    minHeight:60,borderRadius:8,padding:"5px 4px",
+                    background:isSel?"rgba(110,231,183,.15)":isT?"rgba(147,197,253,.1)":"rgba(245,240,232,.03)",
+                    border:isSel?"1.5px solid rgba(110,231,183,.5)":isT?"1.5px solid rgba(147,197,253,.3)":"1.5px solid transparent",
+                  }}>
+                    <div style={{fontSize:11,fontWeight:isT?900:700,color:isT?"#93C5FD":isSel?"#6EE7B7":"rgba(245,240,232,.8)",marginBottom:3}}>{d}</div>
+                    {dts.slice(0,2).map(t=>{
+                      const c=CATS[t.cat];
+                      return <div key={t.id} style={{fontSize:8,fontWeight:700,padding:"1px 3px",borderRadius:3,marginBottom:1,background:`${c.color}25`,color:c.color,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",opacity:t.done?.5:1}}>{c.icon} {t.title}</div>;
+                    })}
+                    {dts.length>2&&<div style={{fontSize:8,opacity:.35}}>+{dts.length-2}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:800}}>{new Date(selDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})}</div>
+              <button onClick={()=>openAdd(selDate)} style={{padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:800,background:"rgba(245,240,232,.08)",color:"#F5F0E8",cursor:"pointer"}}>+ Add</button>
+            </div>
+            <TaskList tasks={viewTasks()} onTick={tick} onEdit={openEdit} onDel={delTask} confetti={confetti} openAdd={()=>openAdd(selDate)} />
+          </div>}
+
+          {/* ALL VIEW */}
+          {view==="all" && <div className="slide-up">
+            <div style={{fontSize:22,fontWeight:800,marginBottom:3}}>All Tasks</div>
+            <div style={{fontSize:12,opacity:.4,marginBottom:16}}>{tasks.filter(t=>!t.done).length} remaining · {tasks.filter(t=>t.done).length} completed</div>
+            {Object.entries(
+              viewTasks().reduce((acc,t)=>{if(!acc[t.date])acc[t.date]=[];acc[t.date].push(t);return acc;},{})
+            ).sort(([a],[b])=>a.localeCompare(b)).map(([date,ts])=>(
+              <div key={date} style={{marginBottom:22}}>
+                <div style={{fontSize:9,fontWeight:800,letterSpacing:1,opacity:.4,marginBottom:8,paddingBottom:7,borderBottom:"1px solid rgba(245,240,232,.07)",display:"flex",alignItems:"center",gap:8}}>
+                  <span>{new Date(date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"}).toUpperCase()}</span>
+                  {date===TODAY&&<span style={{background:"#93C5FD",color:"#0D1A14",borderRadius:5,padding:"1px 6px",fontSize:8,fontWeight:900}}>TODAY</span>}
+                  <span style={{opacity:.45}}>{relDay(date)}</span>
+                </div>
+                <TaskList tasks={ts} onTick={tick} onEdit={openEdit} onDel={delTask} confetti={confetti} compact />
+              </div>
+            ))}
+            {viewTasks().length===0&&<Empty />}
+          </div>}
+        </div>
+      </div>
+
+      {/* BOTTOM NAV */}
+      <div style={{display:"flex",justifyContent:"space-around",padding:"8px 0 max(8px,env(safe-area-inset-bottom))",background:"rgba(245,240,232,.03)",borderTop:"1px solid rgba(245,240,232,.07)",flexShrink:0}}>
+        {[["today","📋","Today"],["calendar","📅","Calendar"],["all","📂","All"]].map(([v,ic,lb])=>(
+          <button key={v} onClick={()=>setView(v)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 12px",background:"none",cursor:"pointer",color:view===v?"#6EE7B7":"rgba(245,240,232,.38)",fontSize:9,fontWeight:view===v?800:600,transition:"color .2s"}}>
+            <span style={{fontSize:22}}>{ic}</span>{lb}
+          </button>
+        ))}
+        <button onClick={()=>openAdd(view==="calendar"?selDate:TODAY)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 12px",background:"none",cursor:"pointer",color:"rgba(245,240,232,.38)",fontSize:9,fontWeight:600}}>
+          <span style={{fontSize:22,width:34,height:34,borderRadius:10,background:"linear-gradient(135deg,#6EE7B7,#93C5FD)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 12px rgba(110,231,183,.35)",color:"#0D1A14",fontWeight:900}}>+</span>
+          New
+        </button>
+      </div>
+
+      {/* MODAL */}
+      {modal&&(
+        <div className="modal-overlay" onClick={()=>setModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",backdropFilter:"blur(10px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
+          <div className="modal-sheet" onClick={e=>e.stopPropagation()} style={{background:"#181818",border:"1px solid rgba(245,240,232,.12)",borderRadius:"20px 20px 0 0",padding:"22px 18px max(28px,env(safe-area-inset-bottom))",width:"100%",maxWidth:500,boxShadow:"0 -20px 60px rgba(0,0,0,.6)"}}>
+            <div style={{width:36,height:4,borderRadius:2,background:"rgba(245,240,232,.15)",margin:"0 auto 18px"}} />
+            <div style={{fontSize:18,fontWeight:800,marginBottom:16}}>{editId?"✏️ Edit Task":"✨ New Task"}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <input placeholder="What do you need to do?" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} autoFocus />
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <select value={form.cat} onChange={e=>setForm(f=>({...f,cat:e.target.value}))}>
+                  {Object.entries(CATS).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label}</option>)}
+                </select>
+                <select value={form.priority} onChange={e=>setForm(f=>({...f,priority:e.target.value}))}>
+                  <option value="high">🔴 High</option>
+                  <option value="medium">🟡 Medium</option>
+                  <option value="low">🟢 Low</option>
+                </select>
+              </div>
+              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
+              <textarea placeholder="Notes (optional)…" value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} rows={2} style={{resize:"vertical"}} />
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button onClick={()=>setModal(false)} style={{flex:1,padding:12,borderRadius:12,background:"rgba(245,240,232,.07)",color:"#F5F0E8",fontWeight:700,fontSize:14,cursor:"pointer"}}>Cancel</button>
+              {editId&&<button onClick={()=>delTask(editId)} style={{padding:"12px 14px",borderRadius:12,background:"rgba(252,165,165,.15)",color:"#FCA5A5",fontWeight:700,fontSize:14,cursor:"pointer"}}>Delete</button>}
+              <button onClick={saveTask} style={{flex:1,padding:12,borderRadius:12,background:"linear-gradient(135deg,#6EE7B7,#93C5FD)",color:"#0D1A14",fontWeight:800,fontSize:14,cursor:"pointer",boxShadow:"0 0 14px rgba(110,231,183,.3)"}}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Task Components ──────────────────────────────────────────────────────────
+function TaskList({tasks,onTick,onEdit,onDel,confetti,openAdd,compact}){
+  if(!tasks.length) return <Empty onAdd={openAdd} />;
+  return <div style={{display:"flex",flexDirection:"column",gap:compact?5:7}}>{tasks.map(t=><TaskRow key={t.id} task={t} onTick={onTick} onEdit={onEdit} onDel={onDel} confetti={confetti} compact={compact} />)}</div>;
+}
+
+function TaskRow({task:t,onTick,onEdit,onDel,confetti,compact}){
+  const cat=CATS[t.cat], pri=PRIORITIES[t.priority];
+  return (
+    <div className="task-row" style={{display:"flex",alignItems:"flex-start",gap:10,padding:compact?"9px 11px":"13px 13px",borderRadius:13,background:t.done?"rgba(245,240,232,.02)":"rgba(245,240,232,.04)",border:`1px solid ${t.done?"rgba(245,240,232,.05)":"rgba(245,240,232,.08)"}`,position:"relative",overflow:"visible",opacity:t.done?.58:1}}>
+      {confetti===t.id&&<div className="confetti-burst">🎉</div>}
+      {/* Tick */}
+      <button className="tick-btn" onClick={()=>onTick(t.id)} style={{width:24,height:24,borderRadius:7,flexShrink:0,marginTop:1,background:t.done?`${cat.color}28`:"rgba(245,240,232,.06)",border:t.done?`2px solid ${cat.color}`:"2px solid rgba(245,240,232,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>
+        {t.done&&<span style={{color:cat.color,fontWeight:900}}>✓</span>}
+      </button>
+      {/* Accent bar */}
+      <div style={{width:3,borderRadius:4,background:cat.color,flexShrink:0,alignSelf:"stretch",opacity:.7}} />
+      {/* Content */}
+      <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>onEdit(t)}>
+        <div style={{fontSize:compact?12:14,fontWeight:700,textDecoration:t.done?"line-through":"none",color:t.done?"rgba(245,240,232,.35)":"#F5F0E8",marginBottom:t.note&&!compact?3:0}}>{t.title}</div>
+        {t.note&&!compact&&<div style={{fontSize:11,opacity:.35,marginBottom:4}}>{t.note}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:5,background:`${cat.color}18`,color:cat.color}}>{cat.icon} {cat.label}</span>
+          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:5,background:`${pri.color}18`,color:pri.color}}>{t.priority}</span>
+          {!compact&&<span style={{fontSize:9,opacity:.3}}>{relDay(t.date)}</span>}
+        </div>
+      </div>
+      {/* Delete */}
+      <button onClick={()=>onDel(t.id)} style={{width:24,height:24,borderRadius:6,background:"rgba(252,165,165,.08)",color:"#FCA5A5",fontSize:11,cursor:"pointer",opacity:.5,flexShrink:0}}>✕</button>
+    </div>
+  );
+}
+
+function Empty({onAdd}){
+  return (
+    <div style={{textAlign:"center",padding:"40px 0",opacity:.35}}>
+      <div style={{fontSize:38,marginBottom:10}}>🌿</div>
+      <div style={{fontSize:14,fontWeight:700}}>Nothing here!</div>
+      <div style={{fontSize:12,marginTop:3}}>Enjoy the free time — or add something.</div>
+      {onAdd&&<button onClick={onAdd} style={{marginTop:12,padding:"7px 18px",borderRadius:9,background:"rgba(245,240,232,.08)",color:"rgba(245,240,232,.6)",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add task</button>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
